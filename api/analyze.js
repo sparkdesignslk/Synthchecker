@@ -7,11 +7,10 @@ export default async function handler(req, res) {
     const { imageData, mimeType } = req.body;
     if (!imageData || !mimeType) return res.status(400).json({ error: 'Missing imageData or mimeType' });
 
-    const prompt = `You are an expert forensic image analyst. Analyze this image for signs of AI generation.
-Respond with ONLY a valid JSON object. No markdown. No code fences. No text before or after the JSON.
-Exact structure to follow:
-{"verdict":"AI_GENERATED","confidence":85,"ai_probability":85,"authentic_probability":15,"indicators":[{"type":"ai","text":"observation one"},{"type":"real","text":"observation two"},{"type":"neutral","text":"observation three"}],"summary":"Short plain summary here"}
-Important: Do NOT use any quotes, apostrophes, or special characters inside the text or summary values. verdict must be AI_GENERATED, AUTHENTIC, or UNCERTAIN. type must be ai, real, or neutral.`;
+    const prompt = `Analyze this image and determine if it is AI generated or a real photograph.
+Reply with ONLY this JSON, filling in the values. Do not write anything else, no markdown, no explanation:
+{"verdict":"AI_GENERATED","confidence":80,"ai_probability":80,"authentic_probability":20,"indicators":[{"type":"ai","text":"describe what you see"},{"type":"real","text":"describe what you see"},{"type":"neutral","text":"describe what you see"},{"type":"ai","text":"describe what you see"}],"summary":"One or two sentences about your conclusion"}
+Replace AI_GENERATED with AUTHENTIC if it looks real, or UNCERTAIN if unsure.`;
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -29,19 +28,40 @@ Important: Do NOT use any quotes, apostrophes, or special characters inside the 
     if (data.error) return res.status(500).json({ error: data.error.message });
 
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) return res.status(500).json({ error: 'Empty response', debug: JSON.stringify(data).slice(0, 500) });
+    if (!raw) return res.status(500).json({ error: 'Empty response from Gemini' });
 
-    // Extract JSON block and sanitize
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return res.status(500).json({ error: 'No JSON found', raw: raw.slice(0, 300) });
+    // Try multiple extraction strategies
+    let parsed = null;
 
-    // Fix common JSON issues from LLM output
-    let cleaned = match[0]
-      .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')  // remove control chars
-      .replace(/,\s*}/g, '}')                           // trailing commas
-      .replace(/,\s*]/g, ']');                          // trailing commas in arrays
+    // Strategy 1: direct parse
+    try { parsed = JSON.parse(raw.trim()); } catch {}
 
-    const parsed = JSON.parse(cleaned);
+    // Strategy 2: extract first JSON block
+    if (!parsed) {
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          const cleaned = match[0]
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+            .replace(/,\s*}/g, '}')
+            .replace(/,\s*]/g, ']');
+          parsed = JSON.parse(cleaned);
+        } catch {}
+      }
+    }
+
+    // Strategy 3: fallback with raw text as summary
+    if (!parsed) {
+      parsed = {
+        verdict: 'UNCERTAIN',
+        confidence: 50,
+        ai_probability: 50,
+        authentic_probability: 50,
+        indicators: [{ type: 'neutral', text: 'Analysis completed but result format was unexpected' }],
+        summary: raw.slice(0, 200)
+      };
+    }
+
     return res.status(200).json(parsed);
   } catch (err) {
     return res.status(500).json({ error: err.message });
