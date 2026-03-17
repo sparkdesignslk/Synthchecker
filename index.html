@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SYNTHCHECKER — AI Image Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #080c0f; --bg2: #0d1217; --bg3: #111820;
+    --border: #1e2d3d; --border-bright: #2a4060;
+    --accent: #00e5ff; --accent2: #00ff9d; --danger: #ff3d6b; --warn: #ffb800;
+    --text: #c8dce8; --text-dim: #5a7a8e; --text-bright: #eaf4fb;
+    --mono: 'Share Tech Mono', monospace; --sans: 'Syne', sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: linear-gradient(rgba(0,229,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.025) 1px,transparent 1px);
+    background-size: 40px 40px;
+  }
+  body::after {
+    content: ''; position: fixed; top: -100%; left: 0; width: 100%; height: 2px; z-index: 1; pointer-events: none;
+    background: linear-gradient(90deg,transparent,rgba(0,229,255,0.3),transparent);
+    animation: scan 2.4s linear infinite;
+  }
+  @keyframes scan { to { top: 200%; } }
+  .wrapper { position: relative; z-index: 2; max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+  .logo { font-family: var(--sans); font-weight: 800; font-size: 1.5rem; letter-spacing: 0.12em; color: var(--accent); }
+  .logo span { color: var(--text-dim); font-weight: 400; }
+  .status-pill { font-family: var(--mono); font-size: 0.7rem; padding: 4px 12px; border: 1px solid var(--accent); color: var(--accent); border-radius: 2px; letter-spacing: 0.1em; animation: pulse-pill 3s ease-in-out infinite; }
+  @keyframes pulse-pill { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .drop-zone { border: 1px dashed var(--border-bright); border-radius: 4px; padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; background: var(--bg2); margin-bottom: 1.5rem; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(0,229,255,0.04); }
+  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { width: 48px; height: 48px; margin: 0 auto 1rem; border: 1px solid var(--border-bright); border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+  .drop-icon svg { width: 22px; height: 22px; stroke: var(--accent); fill: none; }
+  .drop-label { font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); letter-spacing: 0.06em; line-height: 1.8; }
+  .drop-label strong { color: var(--accent); font-weight: 400; }
+  .action-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  #preview-thumb { width: 72px; height: 72px; object-fit: cover; border: 1px solid var(--border-bright); border-radius: 3px; display: none; }
+  #file-name-label { font-family: var(--mono); font-size: 0.74rem; color: var(--text-dim); flex: 1; word-break: break-all; }
+  .btn-analyze { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 12px 28px; border-radius: 3px; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+  .btn-analyze:hover { background: rgba(0,229,255,0.1); }
+  .btn-analyze:disabled { opacity: 0.35; cursor: not-allowed; }
+  .loading-bar-wrap { display: none; height: 2px; background: var(--border); border-radius: 2px; margin-bottom: 0.75rem; overflow: hidden; }
+  .loading-bar-inner { height: 100%; background: var(--accent); border-radius: 2px; animation: indeterminate 1.4s ease-in-out infinite; width: 40%; }
+  @keyframes indeterminate { 0%{transform:translateX(-120%)} 100%{transform:translateX(350%)} }
+  .loading-bar-wrap.active { display: block; }
+  .loading-status { display: none; font-family: var(--mono); font-size: 0.72rem; color: var(--accent); letter-spacing: 0.08em; margin-bottom: 1.5rem; }
+  .loading-status.active { display: block; }
+  .loading-status::before { content: '> '; }
+  .error-block { background: rgba(255,61,107,0.07); border: 1px solid rgba(255,61,107,0.3); border-radius: 4px; padding: 1rem 1.25rem; font-family: var(--mono); font-size: 0.78rem; color: var(--danger); display: none; margin-bottom: 1.5rem; line-height: 1.6; }
+  #result-panel { display: none; }
+  .result-header { font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 1rem; }
+  .verdict-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem; margin-bottom: 1.25rem; position: relative; overflow: hidden; }
+  .verdict-block::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+  .verdict-block.verdict-ai::before { background: var(--danger); }
+  .verdict-block.verdict-real::before { background: var(--accent2); }
+  .verdict-block.verdict-mixed::before { background: var(--warn); }
+  .verdict-label { font-family: var(--mono); font-size: 0.68rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .verdict-text { font-family: var(--sans); font-size: 1.6rem; font-weight: 800; letter-spacing: 0.04em; }
+  .verdict-ai .verdict-text { color: var(--danger); }
+  .verdict-real .verdict-text { color: var(--accent2); }
+  .verdict-mixed .verdict-text { color: var(--warn); }
+  .scores-grid { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
+  .score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .score-row:last-child { margin-bottom: 0; }
+  .score-label { font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); letter-spacing: 0.06em; width: 140px; flex-shrink: 0; text-transform: uppercase; }
+  .score-bar-bg { flex: 1; height: 6px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 2px; transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+  .score-val { font-family: var(--mono); font-size: 0.72rem; color: var(--text); width: 36px; text-align: right; flex-shrink: 0; }
+  .analysis-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 1.25rem; overflow: hidden; }
+  .analysis-block-header { font-family: var(--mono); font-size: 0.68rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .analysis-body { padding: 1rem 1.25rem; font-family: var(--mono); font-size: 0.78rem; color: var(--text); line-height: 1.8; white-space: pre-wrap; }
+  .indicators-list { padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 8px; }
+  .indicator-item { display: flex; align-items: flex-start; gap: 10px; font-family: var(--mono); font-size: 0.76rem; line-height: 1.6; color: var(--text); }
+  .indicator-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+  .dot-red { background: var(--danger); } .dot-green { background: var(--accent2); } .dot-yellow { background: var(--warn); }
+  footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 0.68rem; color: var(--text-dim); letter-spacing: 0.06em; line-height: 1.8; }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: var(--bg); } ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <div class="logo">SYNTH<span>CHECK</span></div>
+    <div class="status-pill">SYS ONLINE</div>
+  </header>
+
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" />
+    <div class="drop-icon">
+      <svg viewBox="0 0 24 24" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+    </div>
+    <div class="drop-label">
+      <strong>Click to upload</strong> or drag image here<br/>
+      JPEG &middot; PNG &middot; WebP &mdash; max 10MB
+    </div>
+  </div>
+
+  <div class="action-row">
+    <img id="preview-thumb" src="" alt="preview" />
+    <span id="file-name-label">No file selected</span>
+    <button class="btn-analyze" id="btn-analyze" disabled>[ Analyze ]</button>
+  </div>
+
+  <div class="loading-bar-wrap" id="loading-bar-wrap"><div class="loading-bar-inner"></div></div>
+  <div class="loading-status" id="loading-status">Analyzing image with Claude vision...</div>
+  <div class="error-block" id="error-block"></div>
+
+  <div id="result-panel">
+    <div class="result-header">// Analysis Output</div>
+    <div class="verdict-block" id="verdict-block">
+      <div class="verdict-label">Verdict</div>
+      <div class="verdict-text" id="verdict-text">—</div>
+    </div>
+    <div class="scores-grid" id="scores-grid"></div>
+    <div class="analysis-block">
+      <div class="analysis-block-header">// Detected Indicators</div>
+      <div class="indicators-list" id="indicators-list"></div>
+    </div>
+    <div class="analysis-block">
+      <div class="analysis-block-header">// Full Analysis</div>
+      <div class="analysis-body" id="analysis-body"></div>
+    </div>
+  </div>
+
+  <footer>
+    SYNTHCHECKER v2.0 &mdash; Powered by Claude Vision<br/>
+    No account required &mdash; upload and analyze instantly.<br/>
+    Images are processed by Anthropic's API and are not stored or retained.
+  </footer>
+</div>
+
+<script>
+const fileInput = document.getElementById('file-input');
+const dropZone = document.getElementById('drop-zone');
+const previewThumb = document.getElementById('preview-thumb');
+const fileNameLabel = document.getElementById('file-name-label');
+const btnAnalyze = document.getElementById('btn-analyze');
+const loadingWrap = document.getElementById('loading-bar-wrap');
+const loadingStatus = document.getElementById('loading-status');
+const errorBlock = document.getElementById('error-block');
+const resultPanel = document.getElementById('result-panel');
+
+let base64Data = null;
+let mimeType = null;
+
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return showError('Unsupported file type.');
+  if (file.size > 10 * 1024 * 1024) return showError('File too large. Max 10MB.');
+  mimeType = file.type;
+  fileNameLabel.textContent = file.name + '  (' + (file.size / 1024).toFixed(0) + ' KB)';
+  const reader = new FileReader();
+  reader.onload = e => {
+    const result = e.target.result;
+    base64Data = result.split(',')[1];
+    previewThumb.src = result;
+    previewThumb.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+  btnAnalyze.disabled = false;
+  hideError();
+  resultPanel.style.display = 'none';
+}
+
+btnAnalyze.addEventListener('click', async () => {
+  if (!base64Data) return;
+  setLoading(true);
+  hideError();
+  resultPanel.style.display = 'none';
+  try {
+    // Calls /api/analyze — your Vercel serverless proxy
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageData: base64Data, mimeType: mimeType })
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    const raw = (data.content.find(b => b.type === 'text') || {}).text || '';
+    let parsed;
+    try { parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()); }
+    catch { throw new Error('Failed to parse response: ' + raw.slice(0, 200)); }
+    renderResults(parsed);
+  } catch (err) {
+    showError('Error: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+function renderResults(d) {
+  const verdictBlock = document.getElementById('verdict-block');
+  const verdictText = document.getElementById('verdict-text');
+  const scoresGrid = document.getElementById('scores-grid');
+  const indicatorsList = document.getElementById('indicators-list');
+  const analysisBody = document.getElementById('analysis-body');
+  const labelMap = { AI_GENERATED: 'AI GENERATED', AUTHENTIC: 'AUTHENTIC', UNCERTAIN: 'UNCERTAIN' };
+  const classMap = { AI_GENERATED: 'verdict-ai', AUTHENTIC: 'verdict-real', UNCERTAIN: 'verdict-mixed' };
+  verdictText.textContent = labelMap[d.verdict] || d.verdict;
+  verdictBlock.className = 'verdict-block ' + (classMap[d.verdict] || 'verdict-mixed');
+  const scores = [
+    { label: 'AI probability', val: d.ai_probability, color: '#ff3d6b' },
+    { label: 'Authentic', val: d.authentic_probability, color: '#00ff9d' },
+    { label: 'Confidence', val: d.confidence, color: '#00e5ff' }
+  ];
+  scoresGrid.innerHTML = scores.map(s =>
+    '<div class="score-row"><div class="score-label">' + s.label + '</div>' +
+    '<div class="score-bar-bg"><div class="score-bar-fill" style="width:0%;background:' + s.color + ';" data-target="' + Math.round(s.val) + '"></div></div>' +
+    '<div class="score-val">' + Math.round(s.val) + '%</div></div>'
+  ).join('');
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.score-bar-fill').forEach(el => { el.style.width = el.dataset.target + '%'; });
+  });
+  const dotMap = { ai: 'dot-red', real: 'dot-green', neutral: 'dot-yellow' };
+  indicatorsList.innerHTML = (d.indicators || []).map(ind =>
+    '<div class="indicator-item"><div class="indicator-dot ' + (dotMap[ind.type] || 'dot-yellow') + '"></div><span>' + ind.text + '</span></div>'
+  ).join('');
+  analysisBody.textContent = d.summary || '';
+  resultPanel.style.display = 'block';
+}
+
+function setLoading(s) {
+  loadingWrap.className = 'loading-bar-wrap' + (s ? ' active' : '');
+  loadingStatus.className = 'loading-status' + (s ? ' active' : '');
+  btnAnalyze.disabled = s;
+}
+function showError(msg) { errorBlock.textContent = '// ERROR: ' + msg; errorBlock.style.display = 'block'; }
+function hideError() { errorBlock.style.display = 'none'; }
+</script>
+</body>
+</html>
