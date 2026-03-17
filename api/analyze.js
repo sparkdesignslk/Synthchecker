@@ -8,15 +8,10 @@ export default async function handler(req, res) {
     if (!imageData || !mimeType) return res.status(400).json({ error: 'Missing imageData or mimeType' });
 
     const prompt = `You are an expert forensic image analyst. Analyze this image for signs of AI generation.
-You MUST respond with ONLY a valid JSON object. No markdown. No code fences. No explanation. Just the JSON.
+Respond with ONLY a valid JSON object, no markdown, no code fences, no extra text before or after.
 Use this exact structure:
-{"verdict":"AI_GENERATED","confidence":85,"ai_probability":85,"authentic_probability":15,"indicators":[{"type":"ai","text":"observation here"},{"type":"real","text":"observation here"}],"summary":"2-3 sentence plain text analysis here"}
-Rules:
-- verdict: exactly one of AI_GENERATED, AUTHENTIC, UNCERTAIN
-- confidence, ai_probability, authentic_probability: integers 0-100
-- indicators: 4 to 6 items, type must be exactly ai, real, or neutral
-- summary: plain text, no quotes inside, max 200 characters
-- Do not include any text before or after the JSON`;
+{"verdict":"AI_GENERATED","confidence":85,"ai_probability":85,"authentic_probability":15,"indicators":[{"type":"ai","text":"observation"},{"type":"real","text":"observation"}],"summary":"plain text summary under 150 chars"}
+Rules: verdict must be AI_GENERATED, AUTHENTIC, or UNCERTAIN. Include 4-6 indicators. type must be ai, real, or neutral. No quotes or special characters inside text or summary strings.`;
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -25,7 +20,7 @@ Rules:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: imageData } }] }],
-          generationConfig: { maxOutputTokens: 1024, temperature: 0.0, responseMimeType: 'application/json' }
+          generationConfig: { maxOutputTokens: 1024, temperature: 0.0 }
         })
       }
     );
@@ -33,9 +28,11 @@ Rules:
     const data = await geminiRes.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
 
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // Extract JSON object if wrapped in anything
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: 'No JSON found in response: ' + raw.slice(0, 200) });
+    const parsed = JSON.parse(match[0]);
     return res.status(200).json(parsed);
   } catch (err) {
     return res.status(500).json({ error: err.message });
