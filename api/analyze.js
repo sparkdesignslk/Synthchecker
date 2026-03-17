@@ -7,16 +7,15 @@ export default async function handler(req, res) {
     const { imageData, mimeType } = req.body;
     if (!imageData || !mimeType) return res.status(400).json({ error: 'Missing imageData or mimeType' });
 
-    const prompt = `You are a forensic AI image detection expert. Your job is to decide if this image was AI generated or is a real photograph. You MUST give a definitive verdict — never say uncertain unless the image is completely unrecognizable.
+    const prompt = `You are a forensic AI image detection expert. Analyze this image and determine if it is AI generated or a real photograph.
 
-Look for these AI tells: perfect skin with no pores, blurry or melting backgrounds, extra or missing fingers, asymmetric facial features, unnatural lighting, watercolor-like textures, garbled text, floating objects, eyes that look glassy or identical, hair that merges into background, accessories that look painted on.
+Look for AI tells: perfect skin, blurry backgrounds, extra fingers, asymmetric faces, unnatural lighting, watercolor textures, garbled text, glassy eyes, hair merging into background.
+Look for real photo tells: natural grain, consistent shadows, authentic imperfections, realistic depth of field, natural skin texture.
 
-Look for these real photo tells: natural grain and noise, consistent shadows, authentic imperfections, realistic depth of field, natural skin texture, normal background detail.
+You MUST pick AI_GENERATED or AUTHENTIC. Only use UNCERTAIN if the image is abstract or completely unidentifiable.
 
-You MUST pick AI_GENERATED or AUTHENTIC. Only use UNCERTAIN if the image is abstract art, a solid color, or completely unidentifiable.
-
-Reply with ONLY this JSON object, no other text:
-{"verdict":"AI_GENERATED","confidence":85,"ai_probability":85,"authentic_probability":15,"indicators":[{"type":"ai","text":"specific observation"},{"type":"ai","text":"specific observation"},{"type":"real","text":"specific observation"},{"type":"neutral","text":"specific observation"}],"summary":"Definitive one sentence conclusion"}`;
+Reply with ONLY the following JSON, no other text, no markdown:
+{"verdict":"AI_GENERATED","confidence":85,"ai_probability":85,"authentic_probability":15,"indicators":[{"type":"ai","text":"observation"},{"type":"ai","text":"observation"},{"type":"real","text":"observation"},{"type":"neutral","text":"observation"}],"summary":"one sentence conclusion"}`;
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -34,30 +33,22 @@ Reply with ONLY this JSON object, no other text:
     if (data.error) return res.status(500).json({ error: data.error.message });
 
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) return res.status(500).json({ error: 'Empty response from Gemini' });
+    if (!raw) return res.status(500).json({ error: 'Empty response', debug: JSON.stringify(data).slice(0, 500) });
+
+    // Log raw for debugging
+    console.log('RAW GEMINI:', raw);
 
     let parsed = null;
     try { parsed = JSON.parse(raw.trim()); } catch {}
     if (!parsed) {
-      const match = raw.match(/\{[\s\S]*\}/);
+      const match = raw.match(/\{[\s\S]*?\}/);
       if (match) {
-        try {
-          parsed = JSON.parse(match[0]
-            .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
-            .replace(/,\s*}/g, '}')
-            .replace(/,\s*]/g, ']'));
-        } catch {}
+        try { parsed = JSON.parse(match[0]); } catch {}
       }
     }
     if (!parsed) {
-      parsed = {
-        verdict: 'UNCERTAIN',
-        confidence: 50,
-        ai_probability: 50,
-        authentic_probability: 50,
-        indicators: [{ type: 'neutral', text: 'Could not parse analysis result' }],
-        summary: raw.slice(0, 200)
-      };
+      // Return raw so we can see what Gemini is sending
+      return res.status(500).json({ error: 'Could not parse response', raw: raw.slice(0, 500) });
     }
 
     return res.status(200).json(parsed);
