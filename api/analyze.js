@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 verdict must be one of: AI_GENERATED, AUTHENTIC, UNCERTAIN. Include 4-6 indicators. type must be one of: ai, real, neutral.`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
