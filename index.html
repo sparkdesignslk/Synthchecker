@@ -195,11 +195,7 @@ btnAnalyze.addEventListener('click', async () => {
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error);
-    const raw = (data.content.find(b => b.type === 'text') || {}).text || '';
-    let parsed;
-    try { parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()); }
-    catch { throw new Error('Failed to parse response: ' + raw.slice(0, 200)); }
-    renderResults(parsed);
+    renderResults(data);
   } catch (err) {
     showError('Error: ' + err.message);
   } finally {
