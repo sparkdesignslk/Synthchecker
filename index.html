@@ -194,7 +194,7 @@ btnAnalyze.addEventListener('click', async () => {
       body: JSON.stringify({ imageData: base64Data, mimeType: mimeType })
     });
     const data = await response.json();
-    if (data.error) throw new Error(data.error);
+    if (data.error) throw new Error(data.error + (data.raw ? " | RAW: " + data.raw : ""));
     renderResults(data);
   } catch (err) {
     showError('Error: ' + err.message);
