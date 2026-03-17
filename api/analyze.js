@@ -24,7 +24,7 @@ Reply with ONLY the following JSON, no other text, no markdown:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: imageData } }] }],
-          generationConfig: { maxOutputTokens: 1024, temperature: 0.0 }
+          generationConfig: { maxOutputTokens: 2048, temperature: 0.0 }
         })
       }
     );
